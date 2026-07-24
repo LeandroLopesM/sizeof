@@ -9,18 +9,18 @@ use readable::byte::Byte;
 struct Args {
     root: String,
 
+    #[arg(long, short, default_value_t = false)]
+    raw: bool,
     #[arg(long, short)]
     exclude: Option<Vec<String>>
 }
 
-fn walk(dir: DirEntry) -> u64 {
-    debug!("Rayn {}", dir.path().to_str().unwrap());
-
-    if dir.file_type().unwrap().is_dir() {
+fn walk(entry: DirEntry) -> u64 {
+    if entry.file_type().unwrap().is_dir() {
         let mut sum = 0;
 
-        fs::read_dir(dir.path().clone()).unwrap_or_else(|e| {
-            error!("Failed to open directory '{}'", dir.path().to_str().unwrap());
+        fs::read_dir(entry.path().clone()).unwrap_or_else(|e| {
+            error!("Failed to open directory '{}'", entry.path().to_str().unwrap());
             error!("Error: {}", e);
             exit(1);
         }).for_each(|e| sum += walk(e.unwrap()));
@@ -28,10 +28,18 @@ fn walk(dir: DirEntry) -> u64 {
         return sum
     }
 
-    return dir
+    if entry.file_type().unwrap().is_symlink() {
+        return 0;
+    }
+
+    let size = entry
         .metadata()
         .unwrap()
             .file_size();
+
+    debug!("{} => {}", entry.path().to_str().unwrap(), Byte::from(size));
+
+    return size;
 }
 
 fn main() {
@@ -41,20 +49,19 @@ fn main() {
         .init();
     
     let args = Args::parse();
-
     let root = fs::read_dir(args.root.clone());
     
     let mut sum = 0;
     match root {
         Ok(dir) => {
             dir.for_each(|elem| sum += walk(elem.unwrap()));
-            println!("Size sum was: {}", Byte::from(sum));
+            println!("{}", maybe_raw(args.raw, sum));
         },
         Err(err) => {
             if err.kind() == ErrorKind::NotADirectory {
                 println!(
                     "{}",
-                    Byte::from(
+                    maybe_raw(args.raw, 
                         OpenOptions::new()
                             .read(true)
                             .open(args.root)
@@ -69,5 +76,13 @@ fn main() {
             }
 
         },
+    }
+}
+
+fn maybe_raw(raw: bool, size: u64) -> String {
+    if raw {
+        format!("{}", size)
+    } else {
+        Byte::from(size).to_string()
     }
 }
