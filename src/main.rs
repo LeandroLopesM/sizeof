@@ -11,10 +11,15 @@ struct Args {
     root: String,
     
     #[arg(long, short = 'x')]
+    /// Exclude files that match any of these patterns
     exclude: Vec<String>,
+
     #[arg(long, short, default_value_t = false)]
+    /// Print raw size in bytes
     raw: bool,
+
     #[arg(long, short, default_value_t = false)]
+    /// Print files as they are scanned
     verbose: bool,
 }
 
