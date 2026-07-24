@@ -1,11 +1,11 @@
 [package]
 name = "sizeof"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
 clap = { version = "4.6.3", features = ["derive"] }
 colog = "1.4.0"
-glob = "0.3.4"
 log = "0.4.33"
 readable = "0.16.0"
+regex-filtered = "0.2.1"

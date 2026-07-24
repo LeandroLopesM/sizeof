@@ -1,21 +1,30 @@
 use std::{fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs::MetadataExt, process::exit};
 
 use clap::Parser;
-use log::{debug, error};
+use log::{info, error};
 use readable::byte::Byte;
+use regex_filtered::Regexes;
 
 #[derive(Parser, Debug)]
 #[command(about, version)]
 struct Args {
     root: String,
-
+    
+    #[arg(long, short = 'x')]
+    exclude: Vec<String>,
     #[arg(long, short, default_value_t = false)]
     raw: bool,
-    #[arg(long, short)]
-    exclude: Option<Vec<String>>
+    #[arg(long, short, default_value_t = false)]
+    verbose: bool,
 }
 
-fn walk(entry: DirEntry) -> u64 {
+fn walk(entry: DirEntry, patterns: &Regexes) -> u64 {
+    if patterns.regexes().len() != 0 {
+        if patterns.is_match(entry.path().to_str().unwrap()) {
+            return 0;
+        }
+    }
+
     if entry.file_type().unwrap().is_dir() {
         let mut sum = 0;
 
@@ -23,7 +32,7 @@ fn walk(entry: DirEntry) -> u64 {
             error!("Failed to open directory '{}'", entry.path().to_str().unwrap());
             error!("Error: {}", e);
             exit(1);
-        }).for_each(|e| sum += walk(e.unwrap()));
+        }).for_each(|e| sum += walk(e.unwrap(), patterns));
 
         return sum
     }
@@ -37,24 +46,44 @@ fn walk(entry: DirEntry) -> u64 {
         .unwrap()
             .file_size();
 
-    debug!("{} => {}", entry.path().to_str().unwrap(), Byte::from(size));
+    info!("{} => {}", entry.path().to_str().unwrap(), Byte::from(size));
 
     return size;
 }
 
 fn main() {
+    let args = Args::parse();
+    
     colog::default_builder()
-        .filter_level( if cfg!(debug_assertions) { log::LevelFilter::Debug } else { log::LevelFilter::Warn } )
-        .format_level(false)
+        .default_format()
+        .format_timestamp(None)
+        .format_target(false)
+        .filter_level( if cfg!(debug_assertions) || args.verbose  { log::LevelFilter::Info } else { log::LevelFilter::Warn } )
         .init();
     
-    let args = Args::parse();
     let root = fs::read_dir(args.root.clone());
+    let mut matcher = regex_filtered::Builder::new();
+
+    if args.exclude.len() != 0 {
+
+        for pattern in args.exclude.clone() {
+            matcher = matcher.push(&pattern).unwrap_or_else(|err| {
+                error!("Invalid regex pattern '{}'", pattern);
+                error!("{}", err);
+
+                exit(1)
+            })
+        }
+    }
+
+    let regex = matcher.build().unwrap();
     
     let mut sum = 0;
     match root {
         Ok(dir) => {
-            dir.for_each(|elem| sum += walk(elem.unwrap()));
+            dir.for_each(
+                |elem|
+                    sum += walk(elem.unwrap(), &regex));
             println!("{}", maybe_raw(args.raw, sum));
         },
         Err(err) => {
