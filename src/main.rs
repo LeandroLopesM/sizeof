@@ -2,7 +2,7 @@ use std::{fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs::Met
 
 use clap::Parser;
 use log::{info, error};
-use readable::byte::Byte;
+use readable::byte::{Byte};
 use regex_filtered::Regexes;
 
 #[derive(Parser, Debug)]
