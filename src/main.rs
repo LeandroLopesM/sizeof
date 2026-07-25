@@ -10,16 +10,16 @@ use regex_filtered::Regexes;
 struct Args {
     root: String,
     
-    #[arg(long, short = 'x')]
     /// Exclude files that match any of these patterns
+    #[arg(long, short = 'x')]
     exclude: Vec<String>,
 
-    #[arg(long, short, default_value_t = false)]
     /// Print raw size in bytes
+    #[arg(long, short, default_value_t = false)]
     raw: bool,
 
-    #[arg(long, short, default_value_t = false)]
     /// Print files as they are scanned
+    #[arg(long, short, default_value_t = false)]
     verbose: bool,
 }
 
