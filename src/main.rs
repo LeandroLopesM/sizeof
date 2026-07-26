@@ -2,7 +2,7 @@ use std::{env, fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs
 
 use clap::Parser;
 use indicatif::{DecimalBytes, HumanBytes, ProgressBar, ProgressStyle};
-use log::{info, error};
+use log::{error, info, warn};
 use regex_filtered::Regexes;
 
 #[derive(Parser, Debug)]
@@ -29,9 +29,13 @@ struct Args {
     /// Use humanized size units (GB -> GiB, MB -> MiB, etc.)
     #[arg(long, short, default_value_t = false)]
     human: bool,
+    
+    /// Instead of panicking at errors, skip them
+    #[arg(long, short, default_value_t = false)]
+    ignore_errors: bool,
 }
 
-fn walk(entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>) -> u64 {
+fn walk(args: &Args, entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>) -> u64 {
     if patterns.regexes().len() != 0 {
         if patterns.is_match(entry.path().to_str().unwrap()) {
             return 0;
@@ -41,18 +45,29 @@ fn walk(entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>)
     if entry.file_type().unwrap().is_dir() {
         let mut sum = 0;
 
-        let dir = fs::read_dir(entry.path().clone()).unwrap_or_else(|e| {
-            error!("Failed to open directory '{}'", entry.path().to_str().unwrap());
-            error!("Error: {}", e);
-            exit(1);
-        });
+        let dir = fs::read_dir(entry.path().clone());
+
+        if let Err(e) = &dir {
+            if args.verbose {
+                warn!("Failed to open directory '{}'", entry.path().to_str().unwrap());
+                warn!("{}", e);
+            }
+            if !args.ignore_errors {
+                exit(1);
+            } else {
+                return 0;
+            }
+        }
 
         if let Some(bar) = progress {
             bar.inc_length(fs::read_dir(entry.path().clone()).unwrap().count() as u64);
             bar.set_message(format!("{}", entry.file_name().into_string().unwrap()));
         }
 
-        dir.for_each(|e| sum += walk(e.unwrap(), patterns, progress));
+        dir
+            .unwrap()
+            .for_each(|e|
+                sum += walk(args, e.unwrap(), patterns, progress));
 
         return sum
     } else if entry.file_type().unwrap().is_symlink() {
@@ -121,7 +136,7 @@ fn main() {
         Ok(dir) => {
             dir.for_each(
                 |elem|
-                    sum += walk(elem.unwrap(), &regex, &mut progress));
+                    sum += walk(&args, elem.unwrap(), &regex, &mut progress));
             
             if let Some(bar) = progress {
                 bar.finish();
