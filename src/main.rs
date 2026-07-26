@@ -31,7 +31,7 @@ struct Args {
     human: bool,
     
     /// Instead of panicking at errors, skip them
-    #[arg(long, short, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     ignore_errors: bool,
 }
 
