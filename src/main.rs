@@ -1,9 +1,8 @@
 use std::{env, fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs::MetadataExt, process::exit};
 
 use clap::Parser;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{DecimalBytes, HumanBytes, ProgressBar, ProgressStyle};
 use log::{info, error};
-use readable::byte::{Byte};
 use regex_filtered::Regexes;
 
 #[derive(Parser, Debug)]
@@ -26,6 +25,10 @@ struct Args {
     /// Show progress bar
     #[arg(long, short, default_value_t = false)]
     progress: bool,
+    
+    /// Use humanized size units (GB -> GiB, MB -> MiB, etc.)
+    #[arg(long, short, default_value_t = false)]
+    human: bool,
 }
 
 fn walk(entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>) -> u64 {
@@ -34,7 +37,6 @@ fn walk(entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>)
             return 0;
         }
     }
-
     
     if entry.file_type().unwrap().is_dir() {
         let mut sum = 0;
@@ -61,7 +63,7 @@ fn walk(entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>)
         .metadata()
         .unwrap()
             .file_size();
-    info!("{} => {}", entry.path().to_str().unwrap(), Byte::from(size));
+    info!("{:<20} => {}", entry.path().to_str().unwrap(), DecimalBytes(size).to_string());
 
     if let Some(bar) = progress {
         bar.inc(1);
@@ -125,13 +127,13 @@ fn main() {
                 bar.finish();
             }
 
-            println!("{}", maybe_raw(args.raw, sum));
+            println!("{}", maybe_raw(args.raw, args.human, sum));
         },
         Err(err) => {
             if err.kind() == ErrorKind::NotADirectory {
                 println!(
                     "{}",
-                    maybe_raw(args.raw,
+                    maybe_raw(args.raw, args.human,
                         OpenOptions::new()
                             .read(true)
                             .open(args.root)
@@ -149,10 +151,14 @@ fn main() {
     }
 }
 
-fn maybe_raw(raw: bool, size: u64) -> String {
+fn maybe_raw(raw: bool, human: bool, size: u64) -> String {
     if raw {
         format!("{}", size)
     } else {
-        Byte::from(size).to_string()
+        if human {
+            HumanBytes(size).to_string()
+        } else {
+            DecimalBytes(size).to_string()
+        }
     }
 }
