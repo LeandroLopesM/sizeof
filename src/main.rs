@@ -2,7 +2,7 @@ use std::{env, fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs
 
 use clap::Parser;
 use indicatif::{DecimalBytes, HumanBytes, ProgressBar, ProgressStyle};
-use log::{error, info, warn};
+use log::{error, info};
 use regex_filtered::Regexes;
 
 #[derive(Parser, Debug, Clone)]
@@ -50,16 +50,15 @@ fn walk(args: &Args, entry: DirEntry, inclusions: &Regexes, exclusions: &Regexes
     }
 
     if entry.file_type().unwrap().is_dir() {
-        let mut sum = 0;
-
         let dir = fs::read_dir(entry.path().clone());
 
         if let Err(e) = &dir {
-            if args.verbose {
-                warn!("Failed to open directory '{}'", entry.path().to_str().unwrap());
-                warn!("{}", e);
-            }
             if !args.ignore_errors {
+                if let Some(bar) = progress {
+                    bar.abandon();
+                }
+
+                error!("Failed to open directory '{}': {}", entry.path().to_str().unwrap(), e);
                 exit(1);
             } else {
                 return 0;
@@ -71,6 +70,7 @@ fn walk(args: &Args, entry: DirEntry, inclusions: &Regexes, exclusions: &Regexes
             bar.set_message(format!("{}", entry.file_name().into_string().unwrap()));
         }
 
+        let mut sum = 0;
         dir
             .unwrap()
             .for_each(|e|
@@ -106,6 +106,7 @@ fn walk(args: &Args, entry: DirEntry, inclusions: &Regexes, exclusions: &Regexes
 fn main() {
     let mut args = Args::parse();
     
+    // Makes path display for verbose mode pretty on windows (../..\otherpath => ..\..\otherpath)
     if env::consts::OS == "windows" {
         args.root = args.root.replace("/", "\\");
     }
@@ -114,20 +115,20 @@ fn main() {
         .default_format()
         .format_timestamp(None)
         .format_target(false)
-        .filter_level( if cfg!(debug_assertions) || args.verbose  { log::LevelFilter::Info } else { log::LevelFilter::Warn } )
+        .filter_level( if cfg!(debug_assertions) || args.verbose  { log::LevelFilter::Debug } else { log::LevelFilter::Info } )
         .init();
 
     let root = fs::read_dir(args.root.clone());
 
     let mut progress = 
         if args.progress {
-            let pb = ProgressBar::new(1);
-            pb.set_style(
+            let bar = ProgressBar::new(1);
+            bar.set_style(
                 ProgressStyle::with_template("[{elapsed_precise}] {bar:40.white} Scanned ({pos:<7}/{len:7}) Scanning {msg}")
                 .unwrap());
-            pb.set_message(format!("Scanning {}...", args.root));
+            bar.set_message(format!("Scanning {}...", args.root));
 
-            Some(pb)
+            Some(bar)
         } else {
             None
         };
@@ -141,7 +142,12 @@ fn main() {
         Ok(dir) => {
             dir.for_each(
                 |elem|
-                    sum += walk(&args, elem.unwrap(), &inclusions, &exclusions, &mut progress));
+                    sum += walk(
+                        &args,
+                        elem.unwrap(),
+                        &inclusions,
+                        &exclusions,
+                        &mut progress));
             
             if let Some(bar) = progress {
                 bar.finish();
@@ -153,7 +159,8 @@ fn main() {
             if err.kind() == ErrorKind::NotADirectory {
                 println!(
                     "{}",
-                    maybe_raw(args.raw, args.human,
+                    maybe_raw(
+                        args.raw, args.human,
                         OpenOptions::new()
                             .read(true)
                             .open(args.root)
