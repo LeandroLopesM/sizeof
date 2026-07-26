@@ -5,7 +5,7 @@ use indicatif::{DecimalBytes, HumanBytes, ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use regex_filtered::Regexes;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(about, version)]
 struct Args {
     root: String,
@@ -13,6 +13,10 @@ struct Args {
     /// Exclude files that match any of these patterns
     #[arg(long, short = 'x')]
     exclude: Vec<String>,
+
+    /// Only include files that match any of these patterns
+    #[arg(long, short)]
+    include: Vec<String>,
 
     /// Print raw size in bytes
     #[arg(long, short, default_value_t = false)]
@@ -27,7 +31,7 @@ struct Args {
     progress: bool,
     
     /// Use humanized size units (GB -> GiB, MB -> MiB, etc.)
-    #[arg(long, short, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     human: bool,
     
     /// Instead of panicking at errors, skip them
@@ -35,13 +39,16 @@ struct Args {
     ignore_errors: bool,
 }
 
-fn walk(args: &Args, entry: DirEntry, patterns: &Regexes, progress: &mut Option<ProgressBar>) -> u64 {
-    if patterns.regexes().len() != 0 {
-        if patterns.is_match(entry.path().to_str().unwrap()) {
+fn walk(args: &Args, entry: DirEntry, inclusions: &Regexes, exclusions: &Regexes, progress: &mut Option<ProgressBar>) -> u64 {
+    if exclusions.regexes().len() != 0 {
+        if exclusions.is_match(entry.path().to_str().unwrap()) {
+            for r in inclusions.matching(entry.path().to_str().unwrap()) {
+                panic!("{} matches {} {}", entry.path().to_str().unwrap(), r.0, r.1);
+            }
             return 0;
         }
     }
-    
+
     if entry.file_type().unwrap().is_dir() {
         let mut sum = 0;
 
@@ -67,18 +74,27 @@ fn walk(args: &Args, entry: DirEntry, patterns: &Regexes, progress: &mut Option<
         dir
             .unwrap()
             .for_each(|e|
-                sum += walk(args, e.unwrap(), patterns, progress));
+                sum += walk(args, e.unwrap(), inclusions, exclusions, progress));
 
         return sum
     } else if entry.file_type().unwrap().is_symlink() {
         return 0;
     }
 
+    if inclusions.regexes().len() != 0 {
+        if !inclusions.is_match(entry.path().to_str().unwrap()) {
+            return 0;
+        }
+    }
+
     let size = entry
         .metadata()
         .unwrap()
             .file_size();
-    info!("{:<20} => {}", entry.path().to_str().unwrap(), DecimalBytes(size).to_string());
+    
+    if args.verbose {
+        info!("{:<20} => {}", entry.path().to_str().unwrap(), DecimalBytes(size).to_string());
+    }
 
     if let Some(bar) = progress {
         bar.inc(1);
@@ -103,19 +119,6 @@ fn main() {
 
     let root = fs::read_dir(args.root.clone());
 
-    let mut matcher = regex_filtered::Builder::new();
-    if args.exclude.len() != 0 {
-
-        for pattern in args.exclude.clone() {
-            matcher = matcher.push(&pattern).unwrap_or_else(|err| {
-                error!("Invalid regex pattern '{}'", pattern);
-                error!("{}", err);
-
-                exit(1)
-            })
-        }
-    }
-
     let mut progress = 
         if args.progress {
             let pb = ProgressBar::new(1);
@@ -129,14 +132,16 @@ fn main() {
             None
         };
 
-    let regex = matcher.build().unwrap();
+    let exclusions = build_regexes(args.exclude.clone());
+    let inclusions = build_regexes(args.include.clone());
+
     let mut sum = 0;
 
     match root {
         Ok(dir) => {
             dir.for_each(
                 |elem|
-                    sum += walk(&args, elem.unwrap(), &regex, &mut progress));
+                    sum += walk(&args, elem.unwrap(), &inclusions, &exclusions, &mut progress));
             
             if let Some(bar) = progress {
                 bar.finish();
@@ -176,4 +181,20 @@ fn maybe_raw(raw: bool, human: bool, size: u64) -> String {
             DecimalBytes(size).to_string()
         }
     }
+}
+
+fn build_regexes(patterns: Vec<String>) -> Regexes {
+    let mut matcher = regex_filtered::Builder::new();
+    if patterns.len() != 0 {
+        for pattern in patterns.clone() {
+            matcher = matcher.push(&pattern).unwrap_or_else(|err| {
+                error!("Invalid regex pattern '{}'", pattern);
+                error!("{}", err);
+
+                exit(1)
+            })
+        }
+    }
+
+    matcher.build().unwrap()
 }
