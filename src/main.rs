@@ -1,6 +1,7 @@
-use std::{env, fs::{self, DirEntry, OpenOptions}, io::ErrorKind, os::windows::fs::MetadataExt, process::exit};
+use std::{env, fs::{self, DirEntry}, io::ErrorKind, path::Path, process::exit};
 
 use clap::Parser;
+use filesize::PathExt;
 use indicatif::{DecimalBytes, HumanBytes, ProgressBar, ProgressStyle};
 use log::{error, info};
 use regex_filtered::Regexes;
@@ -87,10 +88,25 @@ fn walk(args: &Args, entry: DirEntry, inclusions: &Regexes, exclusions: &Regexes
         }
     }
 
-    let size = entry
-        .metadata()
-        .unwrap()
-            .file_size();
+    let size = entry.path().size_on_disk().unwrap_or_else(|err| {
+        if !args.ignore_errors {
+            if let Some(bar) = progress {
+                bar.abandon();
+            }
+
+            error!(
+                "Failed to get size of file {} ({})",
+                    entry
+                        .path()
+                        .to_str()
+                        .unwrap_or("??"),
+                    err);
+
+            exit(1);
+        }
+
+        0
+    });
     
     if args.verbose {
         info!("{:<20} => {}", entry.path().to_str().unwrap(), DecimalBytes(size).to_string());
@@ -161,13 +177,15 @@ fn main() {
                     "{}",
                     maybe_raw(
                         args.raw, args.human,
-                        OpenOptions::new()
-                            .read(true)
-                            .open(args.root)
-                            .unwrap()
-                                .metadata()
-                                .unwrap()
-                                    .file_size()));
+                        Path::new(&args.root)
+                            .size_on_disk()
+                            .unwrap_or_else(|err| {
+                                if !args.ignore_errors {
+                                    error!("Failed to get size of file {} ({})", args.root, err);
+                                    exit(1);
+                                }
+                                0
+                            })));
             } else {
                 error!("Failed to open directory '{}'", args.root);
                 error!("Error: {}", err);
