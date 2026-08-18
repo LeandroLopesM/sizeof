@@ -1,6 +1,6 @@
 .{
     .name = .sizeof,
-    .version = "0.1.1",
+    .version = "0.2.1",
     .fingerprint = 0xa47c31c68b072885,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
@@ -12,7 +12,7 @@
             .url = "git+https://github.com/ikskuh/zig-args?ref=master#fae95c8350c8791752392cc24efa17b5b8b9275b",
             .hash = "args-0.0.0-CiLiqrjgAAAJ1dlySoNHUhYpX1btAdDU2Rr4Ls61VTbO",
         },
-        .readable = .{
+        .readable_size = .{
             .url = "git+https://github.com/crrow/readable_size?ref=HEAD#f155d4c2a90a6edb6df10e6f267cd77d971f5b04",
             .hash = "readable_size-0.0.2-d2OU2UC7AAAB1XGbpU71fhwZwL0KwTP0_scR_M1t_wCo",
         },
