@@ -31,16 +31,12 @@ fn visit(ctx: ?*anyopaque, entry: *const zlob.walk.Entry) zlob.walk.VisitAction 
 
         if (c.bar.file) |b| {
             b.setName(entry.basename);
+            b.completeOne();
         }
     } else if (entry.kind == .directory) {
-        if (entry.meta.nlink != 0) {
-            if (c.bar.file) |b| {
-                b.increaseEstimatedTotalItems(entry.meta.nlink);
-            }
-
-            if (c.bar.dir) |b| {
-                b.setName(entry.basename);
-            }
+        if (c.bar.dir) |b| {
+            b.setName(entry.basename);
+            b.completeOne();
         }
     }
     return .cont;
@@ -63,11 +59,11 @@ pub fn main(init: std.process.Init) !u8 {
     const rootNode = std.Progress.start(init.io, .{});
 
     if (opts.options.progress) {
-        ctx.bar.dir = rootNode.startFmt(1, "Measuring {s}", .{opts.positionals[0]});
-        ctx.bar.file = ctx.bar.dir.?.start("", 1);
+        ctx.bar.dir = rootNode.startFmt(0, "Measuring {s}", .{opts.positionals[0]});
+        ctx.bar.file = ctx.bar.dir.?.start("", 0);
     }
 
-    const r = try zlob.walk.run(
+    (try zlob.walk.run(
         alloc,
         opts.positionals[0],
         .{
@@ -82,8 +78,7 @@ pub fn main(init: std.process.Init) !u8 {
             .context = &ctx,
             .visit = visit,
         },
-    );
-    defer r.deinit();
+    )).deinit();
 
     if (ctx.bar.file) |b| {
         b.end();
