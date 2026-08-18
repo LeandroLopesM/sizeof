@@ -9,16 +9,10 @@ const Args = struct {
     progress: bool = false,
 };
 
-pub fn usage(exec_name: []const u8) u8 {
-    log.err("USAGE: {s}: [options] <root>", .{exec_name});
-
-    return 1;
-}
-
 fn visit(ctx: ?*anyopaque, entry: *const zlob.walk.Entry) zlob.walk.VisitAction {
     if (entry.kind == .file) {
-        const trueSize: *u64 = @as(*u64, @ptrCast(@alignCast(ctx.?)));
-        trueSize.* += entry.meta.size;
+        const trueSize: *read.ReadableSize = @as(*read.ReadableSize, @ptrCast(@alignCast(ctx.?)));
+        trueSize.*.bytes += entry.meta.size;
     }
 
     return .cont;
@@ -32,16 +26,19 @@ pub fn main(init: std.process.Init) !u8 {
     defer opts.deinit();
 
     if (opts.positionals.len == 0) {
-        return usage(opts.executable_name orelse "sizeof");
+        log.err("USAGE: sizeof [flags] <root>", .{});
+        return 1;
     }
 
-    var size = try alloc.allocator().alloc(u64, 1);
-    size[0] = 0;
+    var size = try alloc.allocator().alloc(read.ReadableSize, 1);
+    size[0].bytes = 0;
 
     const r = try zlob.walk.run(
         alloc.allocator(),
         opts.positionals[0],
         .{
+            .respect_git = false,
+            .skip_git_dir = false,
             .meta = .{
                 .size = true,
             },
@@ -53,9 +50,8 @@ pub fn main(init: std.process.Init) !u8 {
     );
     defer r.deinit();
 
-    var buff: [64]u8 = undefined;
-    const tmp: read.ReadableSize = .{ .bytes = size[0] };
-    const fmt = try tmp.formatInto(&buff);
+    var buff: [128]u8 = undefined;
+    const fmt = try size[0].formatInto(&buff);
 
     log.info("{s}", .{fmt});
     return 0;
