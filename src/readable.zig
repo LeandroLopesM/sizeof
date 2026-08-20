@@ -45,7 +45,7 @@ const HumanUnit = enum(u8) {
 };
 
 fn serialize(a: std.mem.Allocator, raw: i32, val: f64, human: bool) ![]u8 {
-    return try std.fmt.allocPrint(a, "{d:.2} {s}", .{ val, if (human) HumanUnit.string(raw) else SIUnit.string(raw) });
+    return try std.fmt.allocPrint(a, "{d:.2} {s}\n", .{ val, if (human) HumanUnit.string(raw) else SIUnit.string(raw) });
 }
 
 pub fn from(a: std.mem.Allocator, num: u64, humanized: bool) ![]u8 {

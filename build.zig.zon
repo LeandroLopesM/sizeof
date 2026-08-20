@@ -1,6 +1,6 @@
 .{
     .name = .sizeof,
-    .version = "0.2.1",
+    .version = "0.2.2",
     .fingerprint = 0xa47c31c68b072885,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{

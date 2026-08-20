@@ -86,7 +86,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     if (ctx.bar.dir) |b| b.end();
 
-    const fmt = read.from(alloc, ctx.size, opts.options.humanized) catch "Unknown";
-    std.debug.print("{s}\n", .{fmt});
+    const fmt = read.from(alloc, ctx.size, opts.options.humanized) catch "Unknown\n";
+    try std.Io.File.stdout().writeStreamingAll(init.io, fmt);
     return 0;
 }
